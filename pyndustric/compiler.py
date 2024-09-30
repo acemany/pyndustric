@@ -15,6 +15,9 @@ import sys
 import textwrap
 
 
+__all__ = ["Compiler"]
+
+
 class _Instruction:
     """
     Represents a mlog instruction.

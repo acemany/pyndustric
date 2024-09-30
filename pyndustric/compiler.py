@@ -7,7 +7,7 @@ from .constants import (ERR_COMPLEX_ASSIGN, ERR_COMPLEX_VALUE, ERR_UNSUPPORTED_O
                         MAX_INSTRUCTIONS)
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Union
+from typing import Callable, Any
 from string import hexdigits
 import ast
 import inspect
@@ -71,7 +71,7 @@ class Function:
 
 
 class CompilerError(ValueError):
-    def __init__(self, code, node: ast.AST, desc="", **context):
+    def __init__(self, code: str, node: ast.AST | None, desc: str = "", **context: Any):
         if node is None:
             node = ast.Module(lineno=0, col_offset=0)  # dummy value
 
@@ -142,18 +142,17 @@ def _name_as_res(name: str):
 
 class Compiler(ast.NodeVisitor):
     def __init__(self):
-        self._ins = [_Instruction(f"set {REG_STACK} 0")]
+        self._ins: list[_Instruction] = [_Instruction(f"set {REG_STACK} 0")]
         self._in_def = None  # current function name
         self._epilogue = None  # current function's epilogue label
-        self._functions = {}
+        self._functions: dict[str, Function] = {}
         self._tmp_var_counter = 0
-        self._scope_start_label = (
-            []
-        )  # needed for continue to know its previous label to jump to; works like a stack
+        # needed for continue to know its previous label to jump to; works like a stack
+        self._scope_start_label: list[_Label] = []
         # needed for break to know its next label to jump to; works like a stack
-        self._scope_end_label = []
+        self._scope_end_label: list[_Label] = []
 
-    def ins_append(self, ins):
+    def ins_append(self, ins: _Instruction | str):
         if not isinstance(ins, _Instruction):
             ins = _Instruction(ins)
         self._ins.append(ins)
@@ -162,7 +161,7 @@ class Compiler(ast.NodeVisitor):
         self._tmp_var_counter += 1
         return REG_TMP_FMT.format(self._tmp_var_counter)
 
-    def compile(self, code: Union[str, Callable, Path]):
+    def compile(self, code: str | Callable[..., object] | Path):
         if inspect.isfunction(code):
             code = textwrap.dedent(inspect.getsource(code))
             # i.e. `tree.body_of_tree[def].body_of_function`
@@ -254,7 +253,7 @@ class Compiler(ast.NodeVisitor):
         right = self.as_value(node.value)
         self.ins_append(f"op {op} {target.id} {target.id} {right}")
 
-    def conditional_jump(self, destination_label, test, jump_if_test=True):
+    def conditional_jump(self, destination_label: _Label, test: ast.expr, jump_if_test: bool = True):
         if isinstance(test, ast.Compare):
             if len(test.ops) != 1 or len(test.comparators) != 1:
                 # 1 < 2 < 3: Compare(left=1, ops=[<, <], comparators=[2, 3])
@@ -305,29 +304,29 @@ class Compiler(ast.NodeVisitor):
         else:
             self.ins_append(_Jump(destination_label, f"{cmp} {left} {right}"))
 
-    def radar_instruction(self, variable, obj, value) -> str:
+    def radar_instruction(self, variable: str, obj: str, value: ast.Call) -> str:
         if obj == "Unit":
             radar = "uradar"
             obj = "@unit"
         else:
             radar = "radar"
 
-        criteria = [arg.id for arg in value.args]
-        if len(criteria) > 3:
+        criterias: list[str] = [arg.id for arg in value.args]
+        if len(criterias) > 3:
             raise CompilerError(
                 ERR_ARGC_MISMATCH,
                 value,
-                n1=len(criteria),
+                n1=len(criterias),
                 called="Unit.radar",
                 n2="<=3",
                 plural1="s",
                 plural2="s",
             )
 
-        while len(criteria) < 3:
-            criteria.append("any")
+        while len(criterias) < 3:
+            criterias.append("any")
 
-        criteria = " ".join(criteria)
+        criteria: str = " ".join(criterias)
         key = "distance"
         order = "min"
         for k in value.keywords:
@@ -346,7 +345,7 @@ class Compiler(ast.NodeVisitor):
         self.ins_append(f"{radar} {criteria} {key} {obj} {order} {variable}")
         return variable
 
-    def visit_If(self, node):
+    def visit_If(self, node: ast.If):
         endif_label = _Label()
         if_false_label = _Label() if node.orelse else endif_label
         self.conditional_jump(if_false_label, node.test, jump_if_test=False)
@@ -359,7 +358,7 @@ class Compiler(ast.NodeVisitor):
                 self.visit(subnode)
         self.ins_append(endif_label)
 
-    def visit_While(self, node):
+    def visit_While(self, node: ast.While):
         """This will be called for any* while loop."""
         self._scope_start_label.append(_Label())
         self._scope_end_label.append(_Label())
@@ -370,7 +369,7 @@ class Compiler(ast.NodeVisitor):
         self.conditional_jump(self._scope_start_label.pop(), node.test, jump_if_test=True)
         self.ins_append(self._scope_end_label.pop())
 
-    def visit_For(self, node):
+    def visit_For(self, node: ast.For):
         target = node.target
         if not isinstance(target, ast.Name):
             raise CompilerError(ERR_COMPLEX_ASSIGN, node)
@@ -379,7 +378,7 @@ class Compiler(ast.NodeVisitor):
         if not isinstance(call, ast.Call):
             raise CompilerError(ERR_UNSUPPORTED_ITER, node, a=self.as_value(call))
 
-        inject = []
+        inject: list[_Instruction] = []
         backwards = False
 
         if all((
@@ -389,7 +388,7 @@ class Compiler(ast.NodeVisitor):
         )):
             it = REG_IT_FMT.format(call.lineno, call.col_offset)
             start, end, step = 0, "@links", 1
-            inject.append(f"getlink {target.id} {it}")
+            inject.append(_Instruction(f"getlink {target.id} {it}"))
         elif isinstance(call.func, ast.Name) and call.func.id == "range":
             it = target.id
             argv = call.args
@@ -428,13 +427,13 @@ class Compiler(ast.NodeVisitor):
         self.ins_append(_Jump(condition, "always"))
         self.ins_append(self._scope_end_label.pop())
 
-    def visit_Break(self, node):
+    def visit_Break(self, node: ast.Break):
         self.ins_append(_Jump(self._scope_end_label[-1], "always"))
 
-    def visit_Continue(self, node):
+    def visit_Continue(self, node: ast.Continue):
         self.ins_append(_Jump(self._scope_start_label[-1], "always"))
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef):
         # TODO forbid recursion (or implement it by storing and restoring everything from stack)
         # TODO local variable namespace per-function
         if self._in_def is not None:
@@ -490,7 +489,7 @@ class Compiler(ast.NodeVisitor):
         self._in_def = None
         self._epilogue = None
 
-    def visit_Return(self, node):
+    def visit_Return(self, node: ast.Return):
         if not self._epilogue:
             raise CompilerError(INTERNAL_COMPILER_ERR, node, "return encountered with epilogue being unset")
 
@@ -498,7 +497,7 @@ class Compiler(ast.NodeVisitor):
         self.ins_append(f"set {REG_RET} {val}")
         self.ins_append(_Jump(self._epilogue, "always"))
 
-    def visit_Expr(self, node):
+    def visit_Expr(self, node: ast.Expr):
         call = node.value
         if not isinstance(call, ast.Call):
             raise CompilerError(ERR_UNSUPPORTED_EXPR, node)
@@ -519,7 +518,7 @@ class Compiler(ast.NodeVisitor):
             raise CompilerError(ERR_UNSUPPORTED_EXPR, node)
 
         if isinstance(call.func.value, ast.Attribute):
-            ns = call.func.value.value.id + "." + call.func.value.attr
+            ns: str = call.func.value.value.id + "." + call.func.value.attr
             if ns == "World.blocks":
                 return self.emit_world_syscall_block_standalone(call)
             else:
@@ -566,7 +565,7 @@ class Compiler(ast.NodeVisitor):
                     raise CompilerError(ERR_UNSUPPORTED_SYSCALL, node)
                 return
 
-        ns = call.func.value.id
+        ns: str = call.func.value.id
 
         if ns == "Screen":
             self.emit_screen_syscall(call)
@@ -721,7 +720,7 @@ class Compiler(ast.NodeVisitor):
 
         elif method == "flush":
             if len(node.args) == 0:
-                self.ins_append(f"drawflush display1")
+                self.ins_append("drawflush display1")
             elif len(node.args) == 1:
                 value = self.as_value(node.args[0])
                 self.ins_append(f"drawflush {value}")
@@ -795,7 +794,7 @@ class Compiler(ast.NodeVisitor):
 
         elif method == "shoot":
             if len(node.args) == 0:
-                self.ins_append(f"ucontrol targetp @unit 1 0 0 0")
+                self.ins_append("ucontrol targetp @unit 1 0 0 0")
             elif len(node.args) == 2:
                 x, y = map(self.as_value, node.args)
                 self.ins_append(f"ucontrol target {x} {y} 1 0 0")
@@ -961,7 +960,7 @@ class Compiler(ast.NodeVisitor):
             level = self.as_value(node.args[0])
             self.ins_append(f"cutscene zoom {level}")
         elif method == "camera_stop":
-            self.ins_append(f"cutscene stop")
+            self.ins_append("cutscene stop")
         elif method == "create_explosion":
             if len(node.args) != 5:
                 raise CompilerError(ERR_BAD_SYSCALL_ARGS, node)
@@ -1055,7 +1054,7 @@ class Compiler(ast.NodeVisitor):
 
         return True
 
-    def emit_tuple_syscall(self, node: ast.Call, outputs: list):
+    def emit_tuple_syscall(self, node: ast.Call, outputs: list[str]):
         # All of them currently are of the form Sys.call()
         if not isinstance(node.func, ast.Attribute):
             raise CompilerError(ERR_UNSUPPORTED_SYSCALL, node)
@@ -1136,7 +1135,7 @@ class Compiler(ast.NodeVisitor):
 
         return True
 
-    def as_value(self, node, output: str = None):
+    def as_value(self, node: ast.expr, output: str | None = None) -> str:
         """
         Returns the string representing either a value (like a number) or a variable.
 

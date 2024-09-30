@@ -994,7 +994,7 @@ class Compiler(ast.NodeVisitor):
             raise CompilerError(ERR_UNSUPPORTED_SYSCALL, node)
 
     def emit_world_syscall_block_standalone(self, node: ast.Call):
-        method = node.func.attr
+        method = node.func.attr  # noqa
 
     def emit_world_syscall_block_var(self, node: ast.Call, var: str):
         method = node.func.attr

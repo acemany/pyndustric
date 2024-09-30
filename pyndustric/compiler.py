@@ -558,10 +558,10 @@ class Compiler(ast.NodeVisitor):
                             block_team = v
                         elif kw.arg == "block_rotation":
                             block_rotation = v
-                    if block != False:
-                        if block_team == False:
+                    if block:
+                        if not block_team:
                             raise CompilerError(ERR_BAD_SYSCALL_ARGS, node)
-                        if block_rotation == False:
+                        if not block_rotation:
                             block_rotation = 0
                             self.ins_append(f"setblock block {block} {x} {y} {block_team} {block_rotation}")
                 else:
@@ -584,7 +584,7 @@ class Compiler(ast.NodeVisitor):
 
     def emit_print_syscall(self, node: ast.Call):
         if len(node.args) != 1:
-            raise CompilerError(ERR_BAD_SYSCALL_ARGS)
+            raise CompilerError(ERR_BAD_SYSCALL_ARGS, node)
 
         arg = node.args[0]
         if isinstance(arg, ast.JoinedStr):
@@ -633,11 +633,11 @@ class Compiler(ast.NodeVisitor):
                 return
             self.ins_append(f"printflush {flush}")
         elif flush:
-            self.ins_append(f"printflush message1")
+            self.ins_append("printflush message1")
 
     def emit_sleep_syscall(self, node: ast.Call):
         if len(node.args) != 1:
-            raise CompilerError(ERR_BAD_SYSCALL_ARGS)
+            raise CompilerError(ERR_BAD_SYSCALL_ARGS, node)
 
         arg = node.args[0]
         ms = self.as_value(arg)

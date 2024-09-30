@@ -35,7 +35,7 @@ class _Label(_Instruction):
             raise CompilerError(
                 INTERNAL_COMPILER_ERR,
                 None,
-                "lineno should be set. some instruction likely referenced this unstored label",
+                "lineno should be set. Some instruction likely referenced this unstored label",
             )
 
         return str(self._lineno)
@@ -259,7 +259,7 @@ class Compiler(ast.NodeVisitor):
                     f"op {BIN_CMP.get(type(test.ops.pop(0)))} {tmp} {self.as_value(test.left)} {self.as_value(test.comparators.pop(0))}"
                 )
                 # leave one for below
-                for i in range(len(test.ops) - 1):
+                for _ in range(len(test.ops) - 1):
                     # tmp = tmp < n
                     self.ins_append(
                         f"op {BIN_CMP.get(type(test.ops.pop(0)))} {tmp} {tmp} {self.as_value(test.comparators.pop(0))}"

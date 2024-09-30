@@ -107,7 +107,7 @@ def _parse_code(code: str):
     return CompatTransformer().visit(ast.parse(code))
 
 
-def _name_as_resource(name: str, mapping: dict):
+def _name_as_resource(name: str, mapping: dict[str, str]):
     # It might already be a resource (e.g. when needing a resource and getting Env.res).
     if name.startswith("@"):
         return name
@@ -236,7 +236,7 @@ class Compiler(ast.NodeVisitor):
         else:
             raise CompilerError(ERR_COMPLEX_ASSIGN, node)
 
-    def visit_AugAssign(self, node: ast.Assign):
+    def visit_AugAssign(self, node: ast.AugAssign):
         target = node.target  # e.g., x in "x += 1"
         if not isinstance(target, ast.Name):
             raise CompilerError(ERR_COMPLEX_ASSIGN, node)

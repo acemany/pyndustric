@@ -1383,7 +1383,7 @@ class Compiler(ast.NodeVisitor):
         raise CompilerError(ERR_UNSUPPORTED_EXPR, node)
 
     def generate_masm(self):
-        # Fill labels' line numbers
+        # Fill label's line numbers
         lineno = 0
         for ins in self._ins:
             if isinstance(ins, _Label):

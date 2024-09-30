@@ -185,7 +185,7 @@ class World:
         piercing: bool = False,
     ):
         """
-        Cause a explosion. Hits_air, hits_ground and piercing are kwargs.
+        Cause a explosion. hits_air, hits_ground and piercing are kwargs.
         """
     @staticmethod
     def set_flag(ident: str):
@@ -431,7 +431,7 @@ class Controllable(ABC):
         """Control color of an illuminator"""
     @staticmethod
     def config(config: Content = None):
-        """Configure this block. Config = eg Env.titanium for sorter1"""
+        """Configure this block. config = eg Env.titanium for sorter1"""
 
 class Building(ABC, Senseable, Controllable):
     pass

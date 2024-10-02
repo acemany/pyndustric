@@ -1403,7 +1403,13 @@ class Compiler(ast.NodeVisitor):
             raise CompilerError(ERR_TOO_LONG, ast.Module(lineno=0, col_offset=0))
 
         # Final output is all instructions ignoring labels
-        return "\n".join(str(i) for i in self._ins if not isinstance(i, _Label)) + "\nend\n"
+        output = "\n".join(str(i) for i in self._ins if not isinstance(i, _Label)) + "\nend\n"
+
+        self._ins: list[_Instruction] = [_Instruction(f"set {REG_STACK} 0")]
+        self._functions: dict[str, Function] = {}
+        self._tmp_var_counter = 0
+
+        return output
 
 
 def plural(n: int):
